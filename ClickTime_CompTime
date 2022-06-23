@@ -1,0 +1,152 @@
+#Made by: Jessica Bresnahan
+#Completed: 6/23/22
+#Description: This program asks for you ClickTime username and password to calculate and output your the timesheet dates, total hours,
+#job and task breakdown, and, if you have comp. time, how much you have
+
+import requests, json
+
+#Queries the user token, returns the token
+def getToken():
+    return loadText(getMe())["data"]["AuthToken"]["Token"]
+
+#Converts the json string into dictionary, returns the json string parameter as dictionary
+def loadText(txt):
+    return json.loads(txt.text)
+
+#queries /me, returns query
+def getMe():
+    return requests.get('https://api.clicktime.com/v2/me', auth = (input("Enter your ClickTime username: "), input("Enter your Clicktime password: ")))
+
+#queries /me/timesheet, returns query
+def getTimesheet(token):
+    return requests.get('https://api.clicktime.com/v2/me/timesheets/', headers = {'Authorization' : 'Token ' + str(token)})
+
+def getTimesheetDate(date, token):
+    return requests.get('https://api.clicktime.com/v2/me/timesheets/' + date, headers = {'Authorization' : 'Token ' + str(token)})
+
+#queries /me/jobs, returns query
+def getJobs(token):
+    return requests.get('https://api.clicktime.com/v2/me/jobs/', headers = {'Authorization' : 'Token ' + str(token)})
+
+def getTasks(token):
+    return requests.get('https://api.clicktime.com/v2/me/tasks/', headers = {'Authorization' : 'Token ' + str(token)})
+
+#queries /me/timeentries, returns query
+def getTimeEntries(token):
+    return requests.get('https://api.clicktime.com/v2/me/timeentries/', headers = {'Authorization' : 'Token ' + str(token)})
+
+
+#Iterates through the user's timesheet to find the start dates for their timesheets, returns the start dates in a list
+def findStartDate(timesheet):
+    startDates = []
+    for x in range(len(loadText(timesheet)["data"])):
+        startDates.append(loadText(timesheet)["data"][x]["StartDate"])
+    return startDates
+
+#Iterates through the user's timesheet to find the end dates for their timesheets, returns the end dates in a list
+def findEndDate(timesheet):
+    endDates = []
+    for x in range(len(loadText(timesheet)["data"])):
+        endDates.append(loadText(timesheet)["data"][x]["EndDate"])
+    return endDates
+
+#Iterates through the user's time entries to find their time entries, returns their time entries in a list
+def findTimeEntries(timeEntries):
+    timesEntered = []
+    for x in range(len(loadText(timeEntries)["data"])):
+        timesEntered.append(loadText(timeEntries)["data"][x]["Date"])
+    return timesEntered
+
+#Iterates through the user's time entry hours to find their hours per time entry, returns their hours in a list
+def findHoursEntered(timeEntries):
+    hoursEntered = []
+    load = loadText(timeEntries)["data"]
+    for x in range(len(load)):
+        hoursEntered.append(load[x]["Hours"])
+    return hoursEntered
+
+#Iterates through the user's jobs to find their jobs, returns their jobs in a list
+def findJobEntries(jobEntries, loadTimeEntries):
+    jobs = []
+    load = loadText(jobEntries)["data"]
+    load2 = loadText(loadTimeEntries)["data"]
+    for x in range(len(load2)):
+        for y in range(len(load)):
+            if(load[y]["ID"] == load2[x]["JobID"]):
+                jobs.append(load[y]["Name"])
+    return jobs
+
+#Iterates through the user's tasks to find their tasks, returns their tasks in a list
+def findTaskEntries(taskEntries, loadTimeEntries):
+    tasks = []
+    load = loadText(taskEntries)["data"]
+    load2 = loadText(loadTimeEntries)["data"]
+    for x in range(len(load2)):
+        for y in range(len(load)):
+            if(load[y]["ID"] == load2[x]["TaskID"]):
+                tasks.append(load[y]["Name"])
+    return tasks
+
+#Uses the user's total hours to determine if it is comp. time, returns boolean
+def isCompTime(totalHours):
+    if totalHours > 40:
+        return True
+    else:
+        return False
+
+#Uses the user's total hours to calculate the amount of comp. time they recieve if isCompTime is true, returns difference as int
+def getCompTimeHours(totalHours):
+    if totalHours > 40:
+        return totalHours - 40
+    else:
+        return 0
+
+#Iterates through user's data to create the final data, returns a list of dictionaries per timesheet week
+def findWeekHours(timesheet, timeEntries, hourEntries, jobEntries, taskEntries):
+    data = []
+    startDates = (findStartDate(timesheet))
+    endDates = (findEndDate(timesheet))
+
+    load = loadText(timesheet)
+    
+    for x in range(len(load["data"])):
+        totalWeekHours = 0
+        jobs = []
+        for y in range(len(timeEntries)):
+            if((int(startDates[x][:4] + startDates[x][5:7] + startDates[x][8:])) <= (int(timeEntries[y][:4] + timeEntries[y][5:7] + timeEntries[y][8:])) and (int(timeEntries[y][:4] + timeEntries[y][5:7] + timeEntries[y][8:])) <= (int(endDates[x][:4] + endDates[x][5:7] + endDates[x][8:]))):
+                totalWeekHours += hourEntries[y]
+                jobs.append(dict({("Date:" + timeEntries[y] + "   Job:" + jobEntries[y] + "   Task:" + taskEntries[y]): "Hours- " + str(hourEntries[y])}))
+                
+        data.append({"StartDate" : startDates[x], "EndDate" : endDates[x], "TotalHours" : totalWeekHours, "isCompTime" : isCompTime(totalWeekHours), "CompTimeHours" : getCompTimeHours(totalWeekHours), "Jobs" : jobs})
+
+    return(data)
+
+#Outputs the final data in a readable form     
+def compTime(data):
+    finalData = {"data" : data}
+
+    for x in range(len(finalData["data"])):
+       print("\n\n****************************************\n"+finalData["data"][x]["StartDate"], "to", finalData["data"][x]["EndDate"]+"\n")
+       print("Total hours for the week: ", finalData["data"][x]["TotalHours"])
+       if (finalData["data"][x]["isCompTime"] == True):
+        print("You got", finalData["data"][x]["CompTimeHours"], "hours in comp. time this week")
+       print("\nJobs and Tasks breakdown: \n")
+       for y in range(len(finalData["data"][x]["Jobs"])):
+            print(finalData["data"][x]["Jobs"][y],"\n")
+    
+#main
+def main():
+    token = getToken()
+    print("\n\n\nCalculating\nThis will take a moment...\n\n\n")
+    timesheet = getTimesheet(token)
+    loadTimeEntries = getTimeEntries(token)
+
+    timeEntries = findTimeEntries(loadTimeEntries)
+    hourEntries = findHoursEntered(loadTimeEntries)
+    jobEntries = findJobEntries(getJobs(token), loadTimeEntries)
+    taskEntries = findTaskEntries(getTasks(token), loadTimeEntries)
+
+    data = findWeekHours(timesheet, timeEntries, hourEntries, jobEntries, taskEntries)
+    compTime(data)
+
+main()
